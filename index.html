@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>37ch</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <div class="logo">
+            <h1>37ch</h1>
+        </div>
+        <div class="board-list" id="boardList"></div>
+    </div>
+
+    <div id="boardTitle" class="board-title">/b/ - Random</div>
+
+    <div class="post-form" id="postFormArea">
+        <div class="form-row">
+            <input type="text" id="postName" placeholder="Name (optional, tripcode: #name#key)" autocomplete="off">
+            <input type="text" id="postSubject" placeholder="Subject" autocomplete="off">
+        </div>
+        <div class="form-row">
+            <textarea id="postComment" placeholder="Comment... use >>123 to quote"></textarea>
+        </div>
+        <div class="form-row">
+            <input type="file" id="postImage" accept="image/jpeg,image/png,image/gif,image/webp" class="file-input">
+        </div>
+        <div class="sage-check">
+            <input type="checkbox" id="sageMode">
+            <label for="sageMode">Sage (does not bump thread)</label>
+        </div>
+        <div style="margin-top: 12px; display: flex; gap: 12px; align-items: center;">
+            <button id="createThreadBtn">Create new thread</button>
+            <span style="font-size: 0.7rem;">⬤ anonymous / tripcode supported</span>
+        </div>
+    </div>
+
+    <div id="threadsContainer"></div>
+    <div class="footer">37ch</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="script.js"></script>
+</body>
+</html>
