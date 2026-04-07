@@ -78,6 +78,13 @@ body {
     border-radius: 0px;
 }
 
+.reply-form {
+    margin-top: 16px;
+    margin-bottom: 0;
+    background: #0a140f;
+    border-left: 3px solid #4a7a5a;
+}
+
 .form-row {
     display: flex;
     flex-wrap: wrap;
@@ -115,6 +122,12 @@ body {
     color: #b8d8b8;
 }
 
+.file-label {
+    color: #6f9f7f;
+    font-size: 0.8rem;
+    padding: 6px 0;
+}
+
 button {
     background: #1a3a2a;
     border: 1px solid #4a7a5a;
@@ -129,6 +142,13 @@ button {
 button:hover {
     background: #2a5a4a;
     border-color: #8bcb8b;
+}
+
+.toggle-reply-btn {
+    background: #0f1e18;
+    border-color: #3a6a4a;
+    font-size: 0.8rem;
+    padding: 6px 14px;
 }
 
 .sage-check {
@@ -146,6 +166,23 @@ button:hover {
     background: #0c1712;
     border: 1px solid #2a4a3a;
     margin-bottom: 28px;
+}
+
+
+.thread.sticky {
+    border-left: 4px solid #cfaf3f;
+    border-right: 1px solid #2a4a3a;
+}
+
+
+.thread.locked {
+    opacity: 0.85;
+}
+
+.thread.locked .post-form,
+.thread.locked .submit-reply-btn,
+.thread.locked .toggle-reply-btn {
+    display: none;
 }
 
 .op-post {
@@ -183,6 +220,35 @@ button:hover {
     color: #7f8f7a;
 }
 
+
+.op-badge {
+    background: #2a5a4a;
+    color: #afffaf;
+    padding: 2px 6px;
+    font-size: 0.7rem;
+    font-weight: bold;
+    border-radius: 3px;
+    margin-left: 8px;
+}
+
+
+.lock-badge {
+    background: #4a3a2a;
+    color: #cfaf8f;
+    padding: 2px 6px;
+    font-size: 0.7rem;
+    margin-left: 8px;
+}
+
+
+.sticky-badge {
+    background: #5a4a2a;
+    color: #ffdf8f;
+    padding: 2px 6px;
+    font-size: 0.7rem;
+    margin-left: 8px;
+}
+
 .post-content {
     font-size: 0.9rem;
     word-break: break-word;
@@ -201,14 +267,18 @@ button:hover {
     color: #afffaf;
 }
 
-.attachment {
+
+.attachments {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
     margin-top: 10px;
-    display: inline-block;
 }
 
 .thumb-img {
-    max-width: 180px;
-    max-height: 180px;
+    max-width: 150px;
+    max-height: 150px;
+    object-fit: cover;
     border: 1px solid #3a6a4a;
     cursor: pointer;
     background: #00000033;
@@ -216,8 +286,10 @@ button:hover {
 
 .full-img-modal {
     position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     background: #000000cc;
     display: flex;
     align-items: center;
@@ -232,6 +304,7 @@ button:hover {
     border: 2px solid #8bcb8b;
 }
 
+
 .reply-link {
     font-size: 0.7rem;
     margin-top: 6px;
@@ -242,6 +315,81 @@ button:hover {
 
 .reply-link:hover {
     color: #bfffbf;
+}
+
+
+.op-controls {
+    margin-top: 8px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.op-btn {
+    background: #1a2a22;
+    border: 1px solid #4a6a5a;
+    padding: 4px 10px;
+    font-size: 0.7rem;
+    font-family: 'Fira Code', monospace;
+    color: #8fbf8f;
+    cursor: pointer;
+}
+
+.op-btn:hover {
+    background: #2a4a3a;
+    color: #cfffcc;
+}
+
+.op-btn.danger {
+    border-color: #8a4a4a;
+    color: #cf8f8f;
+}
+
+.op-btn.danger:hover {
+    background: #4a2a2a;
+}
+
+
+.reply-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #000000cc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1001;
+}
+
+.reply-modal-content {
+    background: #0c1712;
+    border: 2px solid #4a7a5a;
+    padding: 24px;
+    max-width: 600px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.reply-modal-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #2a4a3a;
+    font-weight: bold;
+    color: #8bcb8b;
+}
+
+.reply-modal-close {
+    cursor: pointer;
+    font-size: 24px;
+}
+
+.reply-modal-close:hover {
+    color: #afffaf;
 }
 
 .board-title {
@@ -260,7 +408,24 @@ button:hover {
     color: #5f8f6f;
 }
 
+.thread-reply-form-container {
+    transition: all 0.2s ease;
+}
+
+.cancel-reply-btn {
+    background: #1a2a22;
+    border-color: #3a5a4a;
+}
+
+.cancel-reply-btn:hover {
+    background: #2a3a2a;
+}
+
 @media (max-width: 700px) {
     body { padding: 12px; }
     .reply-post { margin-left: 8px; }
+    .attachments { gap: 4px; }
+    .thumb-img { max-width: 100px; max-height: 100px; }
+    .op-controls { gap: 4px; }
+    .op-btn { padding: 3px 6px; font-size: 0.65rem; }
 }
