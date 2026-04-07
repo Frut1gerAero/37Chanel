@@ -27,7 +27,8 @@
             <textarea id="postComment" placeholder="Comment... use >>123 to quote"></textarea>
         </div>
         <div class="form-row">
-            <input type="file" id="postImage" accept="image/jpeg,image/png,image/gif,image/webp" class="file-input">
+            <label class="file-label">Images (max 4):</label>
+            <input type="file" id="postImages" accept="image/jpeg,image/png,image/gif,image/webp" multiple class="file-input">
         </div>
         <div class="sage-check">
             <input type="checkbox" id="sageMode">
@@ -35,12 +36,39 @@
         </div>
         <div style="margin-top: 12px; display: flex; gap: 12px; align-items: center;">
             <button id="createThreadBtn">Create new thread</button>
-            <span style="font-size: 0.7rem;">⬤ anonymous / tripcode supported</span>
+            <span style="font-size: 0.7rem;">⬤ anonymous / tripcode supported / OP can manage threads</span>
         </div>
     </div>
 
     <div id="threadsContainer"></div>
     <div class="footer">37ch</div>
+</div>
+
+<div id="replyModal" class="reply-modal" style="display: none;">
+    <div class="reply-modal-content">
+        <div class="reply-modal-header">
+            <span id="replyModalTitle">Reply to thread</span>
+            <span class="reply-modal-close">&times;</span>
+        </div>
+        <div class="form-row">
+            <input type="text" id="replyName" placeholder="Name (optional, tripcode: #name#key)" autocomplete="off">
+        </div>
+        <div class="form-row">
+            <textarea id="replyComment" placeholder="Comment..." rows="4"></textarea>
+        </div>
+        <div class="form-row">
+            <label class="file-label">Images (max 4):</label>
+            <input type="file" id="replyImages" accept="image/jpeg,image/png,image/gif,image/webp" multiple class="file-input">
+        </div>
+        <div class="sage-check">
+            <input type="checkbox" id="replySage">
+            <label>Sage (does not bump thread)</label>
+        </div>
+        <div style="margin-top: 12px; display: flex; gap: 12px; justify-content: flex-end;">
+            <button id="replyModalCancel">Cancel</button>
+            <button id="replyModalSubmit">Post reply</button>
+        </div>
+    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
