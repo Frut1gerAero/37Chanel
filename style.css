@@ -6,7 +6,7 @@
 
 body {
     background-color: #0a120f;
-    font-family: 'Fira Code', 'Courier New', monospace;
+    font-family: ui-monospace, SFMono-Regular, Consolas, 'Courier New', monospace;
     color: #b8d8b8;
     padding: 20px 24px 48px 24px;
 }
@@ -89,7 +89,7 @@ body {
     background: #05100c;
     border: 1px solid #2a5a4a;
     padding: 10px 12px;
-    font-family: 'Fira Code', monospace;
+    font-family: ui-monospace, SFMono-Regular, Consolas, 'Courier New', monospace;
     color: #c8e8c8;
     font-size: 0.85rem;
     flex: 1;
@@ -110,9 +110,18 @@ body {
     background: #05100c;
     border: 1px solid #2a5a4a;
     padding: 8px 12px;
-    font-family: 'Fira Code', monospace;
+    font-family: ui-monospace, SFMono-Regular, Consolas, 'Courier New', monospace;
     font-size: 0.8rem;
     color: #b8d8b8;
+}
+
+.spam-check {
+    position: absolute;
+    left: -10000px;
+    width: 1px !important;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
 }
 
 .file-label {
@@ -125,7 +134,7 @@ button {
     background: #1a3a2a;
     border: 1px solid #4a7a5a;
     padding: 8px 18px;
-    font-family: 'Fira Code', monospace;
+    font-family: ui-monospace, SFMono-Regular, Consolas, 'Courier New', monospace;
     font-weight: bold;
     color: #e0ffe0;
     cursor: pointer;
@@ -293,7 +302,7 @@ button:hover {
     border: 1px solid #4a6a5a;
     padding: 4px 10px;
     font-size: 0.7rem;
-    font-family: 'Fira Code', monospace;
+    font-family: ui-monospace, SFMono-Regular, Consolas, 'Courier New', monospace;
     color: #8fbf8f;
     cursor: pointer;
 }
@@ -374,6 +383,10 @@ button:hover {
     text-align: center;
     padding: 40px;
     color: #6f9f7f;
+}
+
+.h-captcha {
+    margin: 12px 0;
 }
 
 @media (max-width: 700px) {
