@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>37ch</title>
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
 </head>
 <body>
 <div class="container">
@@ -28,19 +28,21 @@
         </div>
         <div class="form-row">
             <label class="file-label">Images (max 4):</label>
-            <input type="file" id="postImages" accept="image/jpeg,image/png,image/gif,image/webp" multiple class="file-input">
+            <input type="file" id="postImages" accept="image/*" multiple class="file-input">
         </div>
         <div class="sage-check">
             <input type="checkbox" id="sageMode">
             <label for="sageMode">Sage (does not bump thread)</label>
         </div>
+        <div class="h-captcha" data-sitekey="YOUR_HCAPTCHA_SITEKEY"></div>
+        <input type="text" id="postWebsite" class="spam-check" tabindex="-1" autocomplete="off">
         <div style="margin-top: 12px; display: flex; gap: 12px; align-items: center;">
             <button id="createThreadBtn">Create new thread</button>
             <span style="font-size: 0.7rem;">⬤ anonymous / tripcode supported / OP can manage threads</span>
         </div>
     </div>
 
-    <div id="threadsContainer"></div>
+    <div id="threadsContainer"><div class="loading-spinner">Loading threads...</div></div>
     <div class="footer">37ch</div>
 </div>
 
@@ -58,12 +60,14 @@
         </div>
         <div class="form-row">
             <label class="file-label">Images (max 4):</label>
-            <input type="file" id="replyImages" accept="image/jpeg,image/png,image/gif,image/webp" multiple class="file-input">
+            <input type="file" id="replyImages" accept="image/*" multiple class="file-input">
         </div>
         <div class="sage-check">
             <input type="checkbox" id="replySage">
             <label>Sage (does not bump thread)</label>
         </div>
+        <div class="h-captcha" data-sitekey="YOUR_HCAPTCHA_SITEKEY"></div>
+        <input type="text" id="replyWebsite" class="spam-check" tabindex="-1" autocomplete="off">
         <div style="margin-top: 12px; display: flex; gap: 12px; justify-content: flex-end;">
             <button id="replyModalCancel">Cancel</button>
             <button id="replyModalSubmit">Post reply</button>
@@ -71,7 +75,7 @@
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="vendor/supabase-js.js"></script>
 <script src="script.js"></script>
 </body>
 </html>
