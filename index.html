@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>37ch</title>
     <link rel="stylesheet" href="style.css">
-    <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
 </head>
 <body>
 <div class="container">
@@ -34,7 +33,6 @@
             <input type="checkbox" id="sageMode">
             <label for="sageMode">Sage (does not bump thread)</label>
         </div>
-        <div class="h-captcha" data-sitekey="YOUR_HCAPTCHA_SITEKEY"></div>
         <input type="text" id="postWebsite" class="spam-check" tabindex="-1" autocomplete="off">
         <div style="margin-top: 12px; display: flex; gap: 12px; align-items: center;">
             <button id="createThreadBtn">Create new thread</button>
@@ -66,7 +64,6 @@
             <input type="checkbox" id="replySage">
             <label>Sage (does not bump thread)</label>
         </div>
-        <div class="h-captcha" data-sitekey="YOUR_HCAPTCHA_SITEKEY"></div>
         <input type="text" id="replyWebsite" class="spam-check" tabindex="-1" autocomplete="off">
         <div style="margin-top: 12px; display: flex; gap: 12px; justify-content: flex-end;">
             <button id="replyModalCancel">Cancel</button>
@@ -75,7 +72,6 @@
     </div>
 </div>
 
-<script src="vendor/supabase-js.js"></script>
 <script src="script.js"></script>
 </body>
 </html>

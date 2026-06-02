@@ -1,7 +1,4 @@
-const SUPABASE_URL = 'YOUR_SUPABASE_URL';
-const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
-const HCAPTCHA_SITEKEY = 'YOUR_HCAPTCHA_SITEKEY';
-const HCAPTCHA_SECRET = 'YOUR_HCAPTCHA_SECRET';
+// Pure localStorage-based image board - no external APIs, no keys, fully self-contained
 
 let currentBoard = 'b';
 let currentThreadId = null;
@@ -11,7 +8,7 @@ const STORAGE_KEY = '37ch_data';
 const OP_TOKENS_KEY = '37ch_op_tokens';
 
 let localData = {
-    boards: ['b', 'k', 'pol', 'prog', 'game', 'hist', 'str', 'dev'],
+    boards: ['b', 'k', 'pol', 'prog', 'game', 'hist', 'str', 'dev', 'mu', 'o', 'lit', 'fit'],
     threads: {},
     posts: {}
 };
@@ -19,113 +16,15 @@ let localData = {
 let opTokens = {};
 let activeOpThreads = new Set();
 
-const boardNameMap = { b: 'Random', k: 'Weapons', pol: 'Politics', prog: 'Programming', game: 'GameDev', hist: 'History', str: 'Strategy', dev: 'Development' };
+const boardNameMap = { 
+    b: 'Random', k: 'Weapons', pol: 'Politics', prog: 'Programming', 
+    game: 'GameDev', hist: 'History', str: 'Strategy', dev: 'Development', 
+    mu: 'Music', o: 'Art / Drawing', lit: 'Literature', fit: 'Fitness' 
+};
 
-let supabaseClient = null;
-
-function isCaptchaEnabled() {
-    return HCAPTCHA_SITEKEY !== 'YOUR_HCAPTCHA_SITEKEY' && HCAPTCHA_SECRET !== 'YOUR_HCAPTCHA_SECRET';
+function genId() { 
+    return Date.now() + '-' + Math.random().toString(36).substring(2, 8); 
 }
-
-function initSupabase() {
-    if (typeof window.supabase !== 'undefined' && SUPABASE_URL !== 'YOUR_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY') {
-        try {
-            supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            return true;
-        } catch (e) {
-            return false;
-        }
-    }
-    return false;
-}
-
-const isSupabaseActive = initSupabase();
-
-async function verifyHCaptcha(token) {
-    if (!isCaptchaEnabled()) return true;
-    if (!token) return false;
-    
-    try {
-        const formData = new URLSearchParams();
-        formData.append('secret', HCAPTCHA_SECRET);
-        formData.append('response', token);
-        formData.append('sitekey', HCAPTCHA_SITEKEY);
-        
-        const response = await fetch('https://api.hcaptcha.com/siteverify', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: formData.toString()
-        });
-        
-        const data = await response.json();
-        return data.success === true;
-    } catch (error) {
-        return false;
-    }
-}
-
-async function getHCaptchaResponse(scope) {
-    if (!isCaptchaEnabled()) return 'disabled';
-    
-    return new Promise((resolve) => {
-        const captchaElement = scope === 'post' ? 
-            document.querySelector('#postFormArea .h-captcha') : 
-            document.querySelector('#replyModal .h-captcha');
-        
-        if (!captchaElement || !window.hcaptcha) {
-            resolve(null);
-            return;
-        }
-        
-        const widgetId = captchaElement.getAttribute('data-hcaptcha-widget-id');
-        if (!widgetId) {
-            resolve(null);
-            return;
-        }
-        
-        const response = window.hcaptcha.getResponse(widgetId);
-        resolve(response);
-    });
-}
-
-function resetHCaptcha(scope) {
-    if (!isCaptchaEnabled()) return;
-    
-    const captchaElement = scope === 'post' ? 
-        document.querySelector('#postFormArea .h-captcha') : 
-        document.querySelector('#replyModal .h-captcha');
-    if (captchaElement && window.hcaptcha && window.hcaptcha.reset) {
-        window.hcaptcha.reset(captchaElement);
-    }
-}
-
-async function validateCaptcha(scope) {
-    const trap = document.getElementById(`${scope}Website`);
-    if (trap && trap.value.trim()) return false;
-    
-    if (!isCaptchaEnabled()) return true;
-    
-    const token = await getHCaptchaResponse(scope);
-    
-    if (!token || token.length === 0) {
-        alert('Please complete the hCaptcha verification');
-        return false;
-    }
-    
-    const isValid = await verifyHCaptcha(token);
-    
-    if (!isValid) {
-        alert('hCaptcha verification failed. Please try again.');
-        resetHCaptcha(scope);
-        return false;
-    }
-    
-    return true;
-}
-
-function genId() { return Date.now() + '-' + Math.random().toString(36).substring(2, 8); }
 
 async function tripcodeEncode(name) {
     if (!name || !name.includes('#')) return name || 'Anonymous';
@@ -167,9 +66,40 @@ function registerOpToken(threadId) {
     return token;
 }
 
-function replaceFileExtension(fileName, extension) {
-    const baseName = fileName.replace(/\.[^/.]+$/, '') || 'image';
-    return `${baseName}.${extension}`;
+function loadLocal() {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+        try {
+            const d = JSON.parse(raw);
+            localData.boards = d.boards || ['b', 'k', 'pol', 'prog', 'game', 'hist', 'str', 'dev', 'mu', 'o', 'lit', 'fit'];
+            localData.threads = d.threads || {};
+            localData.posts = d.posts || {};
+        } catch (e) { }
+    }
+    ['b', 'k', 'pol', 'prog', 'game', 'hist', 'str', 'dev', 'mu', 'o', 'lit', 'fit'].forEach(b => {
+        if (!localData.threads[b]) localData.threads[b] = [];
+    });
+
+    const tokensRaw = localStorage.getItem(OP_TOKENS_KEY);
+    if (tokensRaw) {
+        try {
+            opTokens = JSON.parse(tokensRaw);
+            activeOpThreads.clear();
+            Object.keys(opTokens).forEach(tid => activeOpThreads.add(tid));
+        } catch (e) { }
+    }
+}
+
+function saveLocal() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        boards: localData.boards,
+        threads: localData.threads,
+        posts: localData.posts
+    }));
+}
+
+function saveOpTokens() {
+    localStorage.setItem(OP_TOKENS_KEY, JSON.stringify(opTokens));
 }
 
 function blobToImage(blob) {
@@ -186,6 +116,11 @@ function blobToImage(blob) {
         };
         img.src = objectUrl;
     });
+}
+
+function replaceFileExtension(fileName, extension) {
+    const baseName = fileName.replace(/\.[^/.]+$/, '') || 'image';
+    return `${baseName}.${extension}`;
 }
 
 async function convertImageToWebp(file) {
@@ -212,69 +147,19 @@ async function convertImageToWebp(file) {
     });
 }
 
-async function uploadImage(file, postId, index) {
-    if (!isSupabaseActive || !supabaseClient) return null;
-    
-    const fileExt = 'webp';
-    const fileName = `${postId}_${index}_${Date.now()}.${fileExt}`;
-    const filePath = `images/${fileName}`;
-    
+async function saveImageLocally(file, postId, index) {
     try {
         const webpFile = await convertImageToWebp(file);
-        const { error } = await supabaseClient.storage
-            .from('images')
-            .upload(filePath, webpFile, {
-                cacheControl: '3600',
-                contentType: 'image/webp',
-                upsert: false
-            });
-        
-        if (error) return null;
-        
-        const { data: publicUrlData } = supabaseClient.storage
-            .from('images')
-            .getPublicUrl(filePath);
-        
-        return publicUrlData.publicUrl;
+        const reader = new FileReader();
+        return new Promise((resolve) => {
+            reader.onloadend = () => {
+                resolve(reader.result);
+            };
+            reader.readAsDataURL(webpFile);
+        });
     } catch (e) {
         return null;
     }
-}
-
-function loadLocal() {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-        try {
-            const d = JSON.parse(raw);
-            localData.boards = d.boards || ['b', 'k', 'pol', 'prog', 'game', 'hist', 'str', 'dev'];
-            localData.threads = d.threads || {};
-            localData.posts = d.posts || {};
-        } catch (e) { }
-    }
-    ['b', 'k', 'pol', 'prog', 'game', 'hist', 'str', 'dev'].forEach(b => {
-        if (!localData.threads[b]) localData.threads[b] = [];
-    });
-
-    const tokensRaw = localStorage.getItem(OP_TOKENS_KEY);
-    if (tokensRaw) {
-        try {
-            opTokens = JSON.parse(tokensRaw);
-            activeOpThreads.clear();
-            Object.keys(opTokens).forEach(tid => activeOpThreads.add(tid));
-        } catch (e) { }
-    }
-}
-
-function saveLocal() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        boards: localData.boards,
-        threads: localData.threads,
-        posts: localData.posts
-    }));
-}
-
-function saveOpTokens() {
-    localStorage.setItem(OP_TOKENS_KEY, JSON.stringify(opTokens));
 }
 
 async function createPost(board, threadId, subject, comment, nameRaw, imageFiles, sage, isOp) {
@@ -285,7 +170,7 @@ async function createPost(board, threadId, subject, comment, nameRaw, imageFiles
     if (imageFiles && imageFiles.length) {
         const files = Array.from(imageFiles).slice(0, 4);
         for (let i = 0; i < files.length; i++) {
-            const url = await uploadImage(files[i], postId, i);
+            const url = await saveImageLocally(files[i], postId, i);
             if (url) imageUrls.push(url);
         }
     }
@@ -309,65 +194,34 @@ async function createPost(board, threadId, subject, comment, nameRaw, imageFiles
         registerOpToken(threadId);
     }
 
-    function saveToLocal() {
-        localData.posts[post.id] = post;
-        if (isOp) {
-            if (!localData.threads[board]) localData.threads[board] = [];
-            if (!localData.threads[board].includes(post.id)) {
-                localData.threads[board].unshift(post.id);
-            }
-        } else {
-            if (localData.posts[threadId]) {
-                if (!localData.posts[threadId].replies) localData.posts[threadId].replies = [];
-                if (!localData.posts[threadId].replies.includes(post.id)) {
-                    localData.posts[threadId].replies.push(post.id);
-                }
-                if (!sage) {
-                    const threadArr = localData.threads[board];
-                    const idx = threadArr.indexOf(threadId);
-                    if (idx !== -1) {
-                        threadArr.splice(idx, 1);
-                        threadArr.unshift(threadId);
-                    }
-                }
-            }
-        }
-        saveLocal();
-    }
-
-    if (isSupabaseActive && supabaseClient) {
-        try {
-            const { error } = await supabaseClient.from('posts').insert([post]);
-            if (error) {
-                saveToLocal();
-            } else {
-                saveToLocal();
-            }
-        } catch (e) {
-            saveToLocal();
+    localData.posts[post.id] = post;
+    if (isOp) {
+        if (!localData.threads[board]) localData.threads[board] = [];
+        if (!localData.threads[board].includes(post.id)) {
+            localData.threads[board].unshift(post.id);
         }
     } else {
-        saveToLocal();
+        if (localData.posts[threadId]) {
+            if (!localData.posts[threadId].replies) localData.posts[threadId].replies = [];
+            if (!localData.posts[threadId].replies.includes(post.id)) {
+                localData.posts[threadId].replies.push(post.id);
+            }
+            if (!sage) {
+                const threadArr = localData.threads[board];
+                const idx = threadArr.indexOf(threadId);
+                if (idx !== -1) {
+                    threadArr.splice(idx, 1);
+                    threadArr.unshift(threadId);
+                }
+            }
+        }
     }
+    saveLocal();
     return post;
 }
 
 async function deletePost(postId, threadId) {
     if (!isUserOp(threadId)) return false;
-    
-    const post = localData.posts[postId];
-    if (post && post.images && post.images.length && isSupabaseActive && supabaseClient) {
-        for (const imageUrl of post.images) {
-            const path = imageUrl.split('/').pop();
-            if (path) {
-                await supabaseClient.storage.from('images').remove([`images/${path}`]);
-            }
-        }
-    }
-    
-    if (isSupabaseActive && supabaseClient) {
-        await supabaseClient.from('posts').delete().eq('id', postId);
-    }
     
     delete localData.posts[postId];
     const op = localData.posts[threadId];
@@ -382,11 +236,7 @@ async function toggleLockThread(threadId) {
     if (!isUserOp(threadId)) return false;
     const thread = localData.posts[threadId];
     if (thread) {
-        const newLocked = !thread.locked;
-        if (isSupabaseActive && supabaseClient) {
-            await supabaseClient.from('posts').update({ locked: newLocked }).eq('id', threadId);
-        }
-        thread.locked = newLocked;
+        thread.locked = !thread.locked;
         saveLocal();
     }
     return true;
@@ -396,57 +246,10 @@ async function toggleStickyThread(threadId) {
     if (!isUserOp(threadId)) return false;
     const thread = localData.posts[threadId];
     if (thread) {
-        const newSticky = !thread.sticky;
-        if (isSupabaseActive && supabaseClient) {
-            await supabaseClient.from('posts').update({ sticky: newSticky }).eq('id', threadId);
-        }
-        thread.sticky = newSticky;
+        thread.sticky = !thread.sticky;
         saveLocal();
     }
     return true;
-}
-
-async function loadFromSupabase() {
-    if (!isSupabaseActive || !supabaseClient) return false;
-    
-    try {
-        const { data: posts, error } = await supabaseClient
-            .from('posts')
-            .select('*')
-            .order('timestamp', { ascending: false });
-        
-        if (error) return false;
-        
-        if (posts && posts.length) {
-            for (const post of posts) {
-                localData.posts[post.id] = post;
-                if (post.isOp && post.board) {
-                    if (!localData.threads[post.board]) localData.threads[post.board] = [];
-                    if (!localData.threads[post.board].includes(post.id)) {
-                        localData.threads[post.board].push(post.id);
-                    }
-                }
-            }
-            
-            for (const post of posts) {
-                if (!post.isOp && post.threadId) {
-                    const op = localData.posts[post.threadId];
-                    if (op) {
-                        if (!op.replies) op.replies = [];
-                        if (!op.replies.includes(post.id)) {
-                            op.replies.push(post.id);
-                        }
-                    }
-                }
-            }
-            
-            saveLocal();
-            return true;
-        }
-    } catch (e) {
-        return false;
-    }
-    return false;
 }
 
 async function getThreadsForBoard(board) {
@@ -531,7 +334,7 @@ function renderPost(post, isOp, showReplyLink = true, threadRootId = null, isThr
     let imagesHtml = '';
     if (post.images && post.images.length) {
         imagesHtml = `<div class="attachments">${post.images.map(img => 
-            `<img src="${img}" class="thumb-img" data-fullimg="${img}" onclick="window.showFullImage(this)" loading="lazy" onerror="this.style.display='none'">`
+            `<img src="${img}" class="thumb-img" data-fullimg="${img}" onclick="window.showFullImage(this)" loading="lazy">`
         ).join('')}</div>`;
     }
     
@@ -603,8 +406,6 @@ function hideReplyModal() {
 async function submitReplyFromModal() {
     if (!currentReplyTarget) return;
     
-    if (!await validateCaptcha('reply')) return;
-    
     const name = document.getElementById('replyName').value;
     let comment = document.getElementById('replyComment').value;
     const images = document.getElementById('replyImages').files;
@@ -625,8 +426,6 @@ async function submitReplyFromModal() {
     
     await createPost(currentBoard, threadId, '', comment, name, images, sage, false);
     
-    resetHCaptcha('reply');
-    
     hideReplyModal();
     
     if (currentThreadId === threadId) {
@@ -645,7 +444,7 @@ async function renderBoardView() {
         let threads = await getThreadsForBoard(currentBoard);
         let container = document.getElementById('threadsContainer');
         if (!threads || !threads.length) {
-            container.innerHTML = `<div style="padding: 32px; text-align:center; border:1px solid #2a4a3a;">No threads yet</div>`;
+            container.innerHTML = `<div style="padding: 32px; text-align:center; border:1px solid #2a4a3a;">No threads yet. Be the first to create one!</div>`;
             return;
         }
         let html = '';
@@ -816,7 +615,7 @@ function attachQuoteLinks() {
 }
 
 function renderBoardNav() {
-    let boards = ['b', 'k', 'pol', 'prog', 'game', 'hist', 'str', 'dev'];
+    let boards = ['b', 'k', 'pol', 'prog', 'game', 'hist', 'str', 'dev', 'mu', 'o', 'lit', 'fit'];
     let navDiv = document.getElementById('boardList');
     navDiv.innerHTML = boards.map(b => `<div class="board-badge ${currentBoard === b ? 'active' : ''}" data-board="${b}">/${b}/</div>`).join('');
     document.querySelectorAll('.board-badge').forEach(el => {
@@ -844,25 +643,7 @@ function initModal() {
     };
 }
 
-function updateHCaptchaSitekeys() {
-    if (isCaptchaEnabled()) {
-        const captchaElements = document.querySelectorAll('.h-captcha');
-        captchaElements.forEach(el => {
-            el.setAttribute('data-sitekey', HCAPTCHA_SITEKEY);
-        });
-        if (window.hcaptcha && window.hcaptcha.render) {
-            captchaElements.forEach(el => {
-                if (!el.hasAttribute('data-hcaptcha-widget-id')) {
-                    window.hcaptcha.render(el);
-                }
-            });
-        }
-    }
-}
-
 document.getElementById('createThreadBtn').onclick = async () => {
-    if (!await validateCaptcha('post')) return;
-    
     let name = document.getElementById('postName').value;
     let subject = document.getElementById('postSubject').value;
     let comment = document.getElementById('postComment').value;
@@ -884,17 +665,13 @@ document.getElementById('createThreadBtn').onclick = async () => {
     document.getElementById('postName').value = '';
     document.getElementById('postWebsite').value = '';
     
-    resetHCaptcha('post');
-    
     await renderBoardView();
 };
 
 loadLocal();
 renderBoardNav();
 initModal();
-updateHCaptchaSitekeys();
 
 (async () => {
-    await loadFromSupabase();
     await renderBoardView();
 })();

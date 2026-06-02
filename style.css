@@ -385,10 +385,6 @@ button:hover {
     color: #6f9f7f;
 }
 
-.h-captcha {
-    margin: 12px 0;
-}
-
 @media (max-width: 700px) {
     body { padding: 12px; }
     .reply-post { margin-left: 8px; }
