@@ -22,7 +22,7 @@ const boardNameMap = { b: 'Random', k: 'Weapons', pol: 'Politics', prog: 'Progra
 let supabaseClient = null;
 
 function initSupabase() {
-    if (typeof window.supabase !== 'undefined' && SUPABASE_URL && SUPABASE_URL !== 'https://your-project.supabase.co' && SUPABASE_ANON_KEY !== 'your-anon-key') {
+    if (typeof window.supabase !== 'undefined' && SUPABASE_URL) {
         try {
             supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
             return true;
@@ -35,6 +35,34 @@ function initSupabase() {
 }
 
 const isSupabaseActive = initSupabase();
+
+async function uploadImage(file, postId, index) {
+    if (!isSupabaseActive || !supabaseClient) return null;
+    
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${postId}_${index}_${Date.now()}.${fileExt}`;
+    const filePath = `images/${fileName}`;
+    
+    try {
+        const { data, error } = await supabaseClient.storage
+            .from('images')
+            .upload(filePath, file, {
+                cacheControl: '3600',
+                upsert: false
+            });
+        
+        if (error) throw error;
+        
+        const { data: publicUrl } = supabaseClient.storage
+            .from('images')
+            .getPublicUrl(filePath);
+        
+        return publicUrl.publicUrl;
+    } catch (e) {
+        console.warn('Image upload failed:', e);
+        return null;
+    }
+}
 
 function loadLocal() {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -114,27 +142,18 @@ function registerOpToken(threadId) {
     return token;
 }
 
-async function loadImagesAsBlobs(files, maxCount = 4) {
-    const images = [];
-    const fileList = Array.from(files).slice(0, maxCount);
-    for (const file of fileList) {
-        if (file && file.size) {
-            const reader = new FileReader();
-            const blobUrl = await new Promise((resolve) => {
-                reader.onload = (e) => resolve(e.target.result);
-                reader.readAsDataURL(file);
-            });
-            images.push({ url: blobUrl, name: file.name, size: file.size });
-        }
-    }
-    return images;
-}
-
 async function createPost(board, threadId, subject, comment, nameRaw, imageFiles, sage, isOp) {
     const postId = genId();
     const tripDisplay = await tripcodeEncode(nameRaw);
     
-    const images = imageFiles && imageFiles.length ? await loadImagesAsBlobs(imageFiles, 4) : [];
+    const imageUrls = [];
+    if (imageFiles && imageFiles.length) {
+        const files = Array.from(imageFiles).slice(0, 4);
+        for (let i = 0; i < files.length; i++) {
+            const url = await uploadImage(files[i], postId, i);
+            if (url) imageUrls.push(url);
+        }
+    }
     
     const post = {
         id: postId,
@@ -146,7 +165,7 @@ async function createPost(board, threadId, subject, comment, nameRaw, imageFiles
         name: tripDisplay,
         sage: sage || false,
         timestamp: Date.now(),
-        images: images,
+        images: imageUrls,
         locked: false,
         sticky: false
     };
@@ -183,8 +202,7 @@ async function createPost(board, threadId, subject, comment, nameRaw, imageFiles
 
     if (isSupabaseActive && supabaseClient) {
         try {
-            const postToStore = { ...post, images: images };
-            const { error } = await supabaseClient.from('posts').insert([postToStore]);
+            const { error } = await supabaseClient.from('posts').insert([post]);
             if (error) throw error;
             saveToLocal();
             return post;
@@ -201,9 +219,21 @@ async function createPost(board, threadId, subject, comment, nameRaw, imageFiles
 
 async function deletePost(postId, threadId) {
     if (!isUserOp(threadId)) return false;
+    
+    const post = localData.posts[postId];
+    if (post && post.images && post.images.length && isSupabaseActive && supabaseClient) {
+        for (const imageUrl of post.images) {
+            const path = imageUrl.split('/').pop();
+            if (path) {
+                await supabaseClient.storage.from('images').remove([`images/${path}`]);
+            }
+        }
+    }
+    
     if (isSupabaseActive && supabaseClient) {
         await supabaseClient.from('posts').delete().eq('id', postId);
     }
+    
     delete localData.posts[postId];
     const op = localData.posts[threadId];
     if (op && op.replies) {
@@ -241,6 +271,49 @@ async function toggleStickyThread(threadId) {
     return true;
 }
 
+async function loadFromSupabase() {
+    if (!isSupabaseActive || !supabaseClient) return false;
+    
+    try {
+        const { data: posts, error } = await supabaseClient
+            .from('posts')
+            .select('*')
+            .order('timestamp', { ascending: false });
+        
+        if (error) throw error;
+        
+        if (posts && posts.length) {
+            for (const post of posts) {
+                localData.posts[post.id] = post;
+                if (post.isOp && post.board) {
+                    if (!localData.threads[post.board]) localData.threads[post.board] = [];
+                    if (!localData.threads[post.board].includes(post.id)) {
+                        localData.threads[post.board].push(post.id);
+                    }
+                }
+            }
+            
+            for (const post of posts) {
+                if (!post.isOp && post.threadId) {
+                    const op = localData.posts[post.threadId];
+                    if (op) {
+                        if (!op.replies) op.replies = [];
+                        if (!op.replies.includes(post.id)) {
+                            op.replies.push(post.id);
+                        }
+                    }
+                }
+            }
+            
+            saveLocal();
+            return true;
+        }
+    } catch (e) {
+        console.warn('Failed to load from Supabase:', e);
+    }
+    return false;
+}
+
 async function getThreadsForBoard(board) {
     let threadIds = localData.threads[board] || [];
     let threads = [];
@@ -254,6 +327,7 @@ async function getThreadsForBoard(board) {
                     if (localData.posts[rid]) replies.push(localData.posts[rid]);
                 }
             }
+            replies.sort((a, b) => a.timestamp - b.timestamp);
             threads.push({ ...op, repliesList: replies });
         }
     }
@@ -322,7 +396,7 @@ function renderPost(post, isOp, showReplyLink = true, threadRootId = null, isThr
     let imagesHtml = '';
     if (post.images && post.images.length) {
         imagesHtml = `<div class="attachments">${post.images.map(img => 
-            `<img src="${img.url}" class="thumb-img" data-fullimg="${img.url}" onclick="window.showFullImage(this)" loading="lazy">`
+            `<img src="${img}" class="thumb-img" data-fullimg="${img}" onclick="window.showFullImage(this)" loading="lazy">`
         ).join('')}</div>`;
     }
     
@@ -657,4 +731,8 @@ document.getElementById('createThreadBtn').onclick = async () => {
 loadLocal();
 renderBoardNav();
 initModal();
-renderBoardView();
+
+(async () => {
+    await loadFromSupabase();
+    await renderBoardView();
+})();
