@@ -78,13 +78,6 @@ body {
     border-radius: 0px;
 }
 
-.reply-form {
-    margin-top: 16px;
-    margin-bottom: 0;
-    background: #0a140f;
-    border-left: 3px solid #4a7a5a;
-}
-
 .form-row {
     display: flex;
     flex-wrap: wrap;
@@ -92,7 +85,7 @@ body {
     margin-bottom: 14px;
 }
 
-.form-row input, .form-row textarea, .form-row select {
+.form-row input, .form-row textarea {
     background: #05100c;
     border: 1px solid #2a5a4a;
     padding: 10px 12px;
@@ -144,13 +137,6 @@ button:hover {
     border-color: #8bcb8b;
 }
 
-.toggle-reply-btn {
-    background: #0f1e18;
-    border-color: #3a6a4a;
-    font-size: 0.8rem;
-    padding: 6px 14px;
-}
-
 .sage-check {
     display: flex;
     align-items: center;
@@ -168,21 +154,12 @@ button:hover {
     margin-bottom: 28px;
 }
 
-
 .thread.sticky {
     border-left: 4px solid #cfaf3f;
-    border-right: 1px solid #2a4a3a;
 }
-
 
 .thread.locked {
     opacity: 0.85;
-}
-
-.thread.locked .post-form,
-.thread.locked .submit-reply-btn,
-.thread.locked .toggle-reply-btn {
-    display: none;
 }
 
 .op-post {
@@ -212,15 +189,6 @@ button:hover {
     font-weight: bold;
 }
 
-.tripcode {
-    color: #d0b87a;
-}
-
-.sage-badge {
-    color: #7f8f7a;
-}
-
-
 .op-badge {
     background: #2a5a4a;
     color: #afffaf;
@@ -228,31 +196,24 @@ button:hover {
     font-size: 0.7rem;
     font-weight: bold;
     border-radius: 3px;
-    margin-left: 8px;
 }
 
-
-.lock-badge {
+.lock-badge, .sticky-badge {
     background: #4a3a2a;
     color: #cfaf8f;
     padding: 2px 6px;
     font-size: 0.7rem;
-    margin-left: 8px;
 }
 
-
-.sticky-badge {
-    background: #5a4a2a;
-    color: #ffdf8f;
-    padding: 2px 6px;
-    font-size: 0.7rem;
-    margin-left: 8px;
+.sage-badge {
+    color: #7f8f7a;
 }
 
 .post-content {
     font-size: 0.9rem;
     word-break: break-word;
     margin-bottom: 12px;
+    line-height: 1.4;
 }
 
 .post-content a.quote-link {
@@ -266,7 +227,6 @@ button:hover {
     text-decoration: underline;
     color: #afffaf;
 }
-
 
 .attachments {
     display: flex;
@@ -282,6 +242,11 @@ button:hover {
     border: 1px solid #3a6a4a;
     cursor: pointer;
     background: #00000033;
+}
+
+.thumb-img:hover {
+    opacity: 0.9;
+    border-color: #8bcb8b;
 }
 
 .full-img-modal {
@@ -304,7 +269,6 @@ button:hover {
     border: 2px solid #8bcb8b;
 }
 
-
 .reply-link {
     font-size: 0.7rem;
     margin-top: 6px;
@@ -316,7 +280,6 @@ button:hover {
 .reply-link:hover {
     color: #bfffbf;
 }
-
 
 .op-controls {
     margin-top: 8px;
@@ -348,7 +311,6 @@ button:hover {
 .op-btn.danger:hover {
     background: #4a2a2a;
 }
-
 
 .reply-modal {
     position: fixed;
@@ -408,17 +370,10 @@ button:hover {
     color: #5f8f6f;
 }
 
-.thread-reply-form-container {
-    transition: all 0.2s ease;
-}
-
-.cancel-reply-btn {
-    background: #1a2a22;
-    border-color: #3a5a4a;
-}
-
-.cancel-reply-btn:hover {
-    background: #2a3a2a;
+.loading-spinner {
+    text-align: center;
+    padding: 40px;
+    color: #6f9f7f;
 }
 
 @media (max-width: 700px) {
