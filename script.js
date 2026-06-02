@@ -1,9 +1,9 @@
-const SUPABASE_URL = 'your project url';
-const SUPABASE_ANON_KEY = 'your anon key';
+const SUPABASE_URL = '';
+const SUPABASE_ANON_KEY = '';
 
 let currentBoard = 'b';
 let currentThreadId = null;
-let currentReplyTarget = null; 
+let currentReplyTarget = null;
 
 const STORAGE_KEY = '37ch_data';
 const OP_TOKENS_KEY = '37ch_op_tokens';
@@ -14,8 +14,8 @@ let localData = {
     posts: {}
 };
 
-let opTokens = {}; 
-let activeOpThreads = new Set(); 
+let opTokens = {};
+let activeOpThreads = new Set();
 
 const boardNameMap = { b: 'Random', k: 'Weapons', pol: 'Politics', prog: 'Programming', game: 'GameDev', hist: 'History', str: 'Strategy', dev: 'Development' };
 
@@ -50,7 +50,6 @@ function loadLocal() {
         if (!localData.threads[b]) localData.threads[b] = [];
     });
 
-
     const tokensRaw = localStorage.getItem(OP_TOKENS_KEY);
     if (tokensRaw) {
         try {
@@ -75,7 +74,6 @@ function saveOpTokens() {
 
 function genId() { return Date.now() + '-' + Math.random().toString(36).substring(2, 8); }
 
-
 async function tripcodeEncode(name) {
     if (!name || !name.includes('#')) return name || 'Anonymous';
     const parts = name.split('#');
@@ -88,7 +86,6 @@ async function tripcodeEncode(name) {
     const displayName = parts.join('#') || 'Anonymous';
     return `${displayName} !${trip}`;
 }
-
 
 function generateOpToken(threadId) {
     const salt = localStorage.getItem('op_salt') || (() => {
@@ -105,11 +102,9 @@ function generateOpToken(threadId) {
     return 'op_' + Math.abs(hash).toString(36);
 }
 
-
 function isUserOp(threadId) {
     return activeOpThreads.has(threadId);
 }
-
 
 function registerOpToken(threadId) {
     const token = generateOpToken(threadId);
@@ -119,28 +114,28 @@ function registerOpToken(threadId) {
     return token;
 }
 
-
-async function loadImages(files, maxCount = 4) {
-    const imageUrls = [];
+async function loadImagesAsBlobs(files, maxCount = 4) {
+    const images = [];
     const fileList = Array.from(files).slice(0, maxCount);
     for (const file of fileList) {
         if (file && file.size) {
-            const reader = await new Promise((res) => {
-                const fr = new FileReader();
-                fr.onload = () => res(fr.result);
-                fr.readAsDataURL(file);
+            const reader = new FileReader();
+            const blobUrl = await new Promise((resolve) => {
+                reader.onload = (e) => resolve(e.target.result);
+                reader.readAsDataURL(file);
             });
-            imageUrls.push(reader);
+            images.push({ url: blobUrl, name: file.name, size: file.size });
         }
     }
-    return imageUrls;
+    return images;
 }
 
 async function createPost(board, threadId, subject, comment, nameRaw, imageFiles, sage, isOp) {
     const postId = genId();
     const tripDisplay = await tripcodeEncode(nameRaw);
-    const images = imageFiles && imageFiles.length ? await loadImages(imageFiles, 4) : [];
-
+    
+    const images = imageFiles && imageFiles.length ? await loadImagesAsBlobs(imageFiles, 4) : [];
+    
     const post = {
         id: postId,
         board: board,
@@ -152,7 +147,6 @@ async function createPost(board, threadId, subject, comment, nameRaw, imageFiles
         sage: sage || false,
         timestamp: Date.now(),
         images: images,
-        replies: [],
         locked: false,
         sticky: false
     };
@@ -161,34 +155,18 @@ async function createPost(board, threadId, subject, comment, nameRaw, imageFiles
         registerOpToken(threadId);
     }
 
-    if (isSupabaseActive && supabaseClient) {
-        try {
-            const { data, error } = await supabaseClient.from('posts').insert([post]).select();
-            if (error) throw error;
-            if (data && data[0]) return data[0];
-            return post;
-        } catch (e) {
-            console.warn('Supabase insert failed, using local:', e);
-            fallbackSave(post);
-            return post;
-        }
-    } else {
-        fallbackSave(post);
-        return post;
-    }
-
-    function fallbackSave(p) {
-        localData.posts[p.id] = p;
+    function saveToLocal() {
+        localData.posts[post.id] = post;
         if (isOp) {
             if (!localData.threads[board]) localData.threads[board] = [];
-            if (!localData.threads[board].includes(p.id)) {
-                localData.threads[board].unshift(p.id);
+            if (!localData.threads[board].includes(post.id)) {
+                localData.threads[board].unshift(post.id);
             }
         } else {
             if (localData.posts[threadId]) {
                 if (!localData.posts[threadId].replies) localData.posts[threadId].replies = [];
-                if (!localData.posts[threadId].replies.includes(p.id)) {
-                    localData.posts[threadId].replies.push(p.id);
+                if (!localData.posts[threadId].replies.includes(post.id)) {
+                    localData.posts[threadId].replies.push(post.id);
                 }
                 if (!sage) {
                     const threadArr = localData.threads[board];
@@ -202,127 +180,103 @@ async function createPost(board, threadId, subject, comment, nameRaw, imageFiles
         }
         saveLocal();
     }
-}
 
+    if (isSupabaseActive && supabaseClient) {
+        try {
+            const postToStore = { ...post, images: images };
+            const { error } = await supabaseClient.from('posts').insert([postToStore]);
+            if (error) throw error;
+            saveToLocal();
+            return post;
+        } catch (e) {
+            console.warn('Supabase insert failed, using local:', e);
+            saveToLocal();
+            return post;
+        }
+    } else {
+        saveToLocal();
+        return post;
+    }
+}
 
 async function deletePost(postId, threadId) {
     if (!isUserOp(threadId)) return false;
     if (isSupabaseActive && supabaseClient) {
         await supabaseClient.from('posts').delete().eq('id', postId);
-    } else {
-        delete localData.posts[postId];
-        const op = localData.posts[threadId];
-        if (op && op.replies) {
-            op.replies = op.replies.filter(rid => rid !== postId);
-        }
-        saveLocal();
     }
+    delete localData.posts[postId];
+    const op = localData.posts[threadId];
+    if (op && op.replies) {
+        op.replies = op.replies.filter(rid => rid !== postId);
+    }
+    saveLocal();
     return true;
 }
 
 async function toggleLockThread(threadId) {
     if (!isUserOp(threadId)) return false;
-    const thread = await getThread(threadId);
+    const thread = localData.posts[threadId];
     if (thread) {
         const newLocked = !thread.locked;
         if (isSupabaseActive && supabaseClient) {
             await supabaseClient.from('posts').update({ locked: newLocked }).eq('id', threadId);
-        } else {
-            localData.posts[threadId].locked = newLocked;
-            saveLocal();
         }
+        thread.locked = newLocked;
+        saveLocal();
     }
     return true;
 }
 
 async function toggleStickyThread(threadId) {
     if (!isUserOp(threadId)) return false;
-    const thread = await getThread(threadId);
+    const thread = localData.posts[threadId];
     if (thread) {
         const newSticky = !thread.sticky;
         if (isSupabaseActive && supabaseClient) {
             await supabaseClient.from('posts').update({ sticky: newSticky }).eq('id', threadId);
-        } else {
-            localData.posts[threadId].sticky = newSticky;
-            saveLocal();
         }
+        thread.sticky = newSticky;
+        saveLocal();
     }
     return true;
 }
 
-async function getThread(threadId) {
-    if (isSupabaseActive && supabaseClient) {
-        const { data } = await supabaseClient.from('posts').select('*').eq('id', threadId).single();
-        return data;
-    } else {
-        return localData.posts[threadId];
-    }
-}
-
 async function getThreadsForBoard(board) {
-    if (isSupabaseActive && supabaseClient) {
-        try {
-            let { data, error } = await supabaseClient.from('posts').select('*').eq('board', board).eq('isOp', true).order('timestamp', { ascending: false });
-            if (error) throw error;
-            let threads = data || [];
-            for (let t of threads) {
-                let { data: replies } = await supabaseClient.from('posts').select('*').eq('threadId', t.id).order('timestamp', { ascending: true });
-                t.repliesList = replies || [];
-            }
-
-            threads.sort((a, b) => (b.sticky ? 1 : 0) - (a.sticky ? 1 : 0));
-            return threads;
-        } catch (e) {
-            console.warn(e);
-            return fallbackGetThreads(board);
-        }
-    } else {
-        return fallbackGetThreads(board);
-    }
-
-    function fallbackGetThreads(b) {
-        let threadIds = localData.threads[b] || [];
-        let threads = [];
-        for (let tid of threadIds) {
-            let op = localData.posts[tid];
-            if (op) {
-                let replies = [];
-                if (op.replies) {
-                    for (let rid of op.replies) {
-                        if (localData.posts[rid]) replies.push(localData.posts[rid]);
-                    }
+    let threadIds = localData.threads[board] || [];
+    let threads = [];
+    
+    for (let tid of threadIds) {
+        let op = localData.posts[tid];
+        if (op) {
+            let replies = [];
+            if (op.replies) {
+                for (let rid of op.replies) {
+                    if (localData.posts[rid]) replies.push(localData.posts[rid]);
                 }
-                threads.push({ ...op, repliesList: replies });
             }
+            threads.push({ ...op, repliesList: replies });
         }
-        threads.sort((a, b) => (b.sticky ? 1 : 0) - (a.sticky ? 1 : 0));
-        return threads;
     }
+    
+    threads.sort((a, b) => {
+        if (a.sticky !== b.sticky) return b.sticky ? 1 : -1;
+        return b.timestamp - a.timestamp;
+    });
+    
+    return threads;
 }
 
 async function getRepliesForThread(threadId) {
-    if (isSupabaseActive && supabaseClient) {
-        try {
-            let { data } = await supabaseClient.from('posts').select('*').eq('threadId', threadId).order('timestamp', { ascending: true });
-            return data || [];
-        } catch (e) {
-            return fallbackGetReplies(threadId);
+    let op = localData.posts[threadId];
+    if (!op) return [];
+    let replies = [];
+    if (op.replies) {
+        for (let rid of op.replies) {
+            if (localData.posts[rid]) replies.push(localData.posts[rid]);
         }
-    } else {
-        return fallbackGetReplies(threadId);
     }
-
-    function fallbackGetReplies(tid) {
-        let op = localData.posts[tid];
-        if (!op) return [];
-        let replies = [];
-        if (op.replies) {
-            for (let rid of op.replies) {
-                if (localData.posts[rid]) replies.push(localData.posts[rid]);
-            }
-        }
-        return replies;
-    }
+    replies.sort((a, b) => a.timestamp - b.timestamp);
+    return replies;
 }
 
 function escapeHtml(str) {
@@ -368,7 +322,7 @@ function renderPost(post, isOp, showReplyLink = true, threadRootId = null, isThr
     let imagesHtml = '';
     if (post.images && post.images.length) {
         imagesHtml = `<div class="attachments">${post.images.map(img => 
-            `<img src="${img}" class="thumb-img" data-fullimg="${img}" onclick="window.showFullImage(this)">`
+            `<img src="${img.url}" class="thumb-img" data-fullimg="${img.url}" onclick="window.showFullImage(this)" loading="lazy">`
         ).join('')}</div>`;
     }
     
@@ -419,7 +373,6 @@ function showReplyModal(threadId, postId = null, postNum = null) {
         title.textContent = `Reply to thread`;
     }
     
-
     document.getElementById('replyName').value = '';
     document.getElementById('replyComment').value = '';
     document.getElementById('replyImages').value = '';
@@ -451,8 +404,7 @@ async function submitReplyFromModal() {
         return;
     }
     
-
-    const thread = await getThread(threadId);
+    const thread = localData.posts[threadId];
     if (thread && thread.locked) {
         alert('This thread is locked. Cannot reply.');
         hideReplyModal();
@@ -473,84 +425,93 @@ async function submitReplyFromModal() {
 async function renderBoardView() {
     currentThreadId = null;
     document.getElementById('boardTitle').innerHTML = `/${currentBoard}/ - ${boardNameMap[currentBoard] || currentBoard.toUpperCase()}`;
-    let threads = await getThreadsForBoard(currentBoard);
-    let container = document.getElementById('threadsContainer');
-    if (!threads || !threads.length) {
-        container.innerHTML = `<div style="padding: 32px; text-align:center; border:1px solid #2a4a3a;">✨ No threads yet. Create the first one.</div>`;
-        return;
-    }
-    let html = '';
-    for (let thread of threads) {
-        const isLocked = thread.locked;
-        const threadClass = `thread ${thread.sticky ? 'sticky' : ''} ${isLocked ? 'locked' : ''}`;
-        let opHtml = renderPost(thread, true, false, thread.id, isLocked);
-        let repliesHtml = '';
-        let repliesList = thread.repliesList || [];
-        for (let reply of repliesList.slice(0, 5)) {
-            repliesHtml += renderPost(reply, false, true, thread.id, isLocked);
+    document.getElementById('threadsContainer').innerHTML = '<div class="loading-spinner">Loading threads...</div>';
+    
+    setTimeout(async () => {
+        let threads = await getThreadsForBoard(currentBoard);
+        let container = document.getElementById('threadsContainer');
+        if (!threads || !threads.length) {
+            container.innerHTML = `<div style="padding: 32px; text-align:center; border:1px solid #2a4a3a;">✨ No threads yet. Create the first one.</div>`;
+            return;
         }
-        let moreLink = '';
-        if (repliesList.length > 5) {
-            moreLink = `<div style="padding: 6px 18px;"><a href="#" class="quote-link" data-threadid="${thread.id}" data-viewthread="1">View all ${repliesList.length} replies →</a></div>`;
-        }
-        
-        let replyButtonHtml = '';
-        if (!isLocked) {
-            replyButtonHtml = `<div style="padding: 8px 18px 12px 18px;">
-                <button class="toggle-reply-btn" data-thread="${thread.id}">💬 Reply to thread</button>
+        let html = '';
+        for (let thread of threads) {
+            const isLocked = thread.locked;
+            const threadClass = `thread ${thread.sticky ? 'sticky' : ''} ${isLocked ? 'locked' : ''}`;
+            let opHtml = renderPost(thread, true, false, thread.id, isLocked);
+            let repliesHtml = '';
+            let repliesList = thread.repliesList || [];
+            for (let reply of repliesList.slice(0, 5)) {
+                repliesHtml += renderPost(reply, false, true, thread.id, isLocked);
+            }
+            let moreLink = '';
+            if (repliesList.length > 5) {
+                moreLink = `<div style="padding: 6px 18px;"><a href="#" class="quote-link" data-threadid="${thread.id}" data-viewthread="1">View all ${repliesList.length} replies →</a></div>`;
+            }
+            
+            let replyButtonHtml = '';
+            if (!isLocked) {
+                replyButtonHtml = `<div style="padding: 8px 18px 12px 18px;">
+                    <button class="toggle-reply-btn" data-thread="${thread.id}">💬 Reply to thread</button>
+                </div>`;
+            } else {
+                replyButtonHtml = `<div style="padding: 8px 18px 12px 18px; color: #6f8f6f;">
+                    ⛔ This thread is locked
+                </div>`;
+            }
+            
+            html += `<div class="${threadClass}" data-thread="${thread.id}">
+                ${opHtml}
+                <div id="repliesContainer-${thread.id}">${repliesHtml}</div>
+                ${moreLink}
+                ${replyButtonHtml}
             </div>`;
-        } else {
-            replyButtonHtml = `<div style="padding: 8px 18px 12px 18px; color: #6f8f6f;">
-                ⛔ This thread is locked
-            </div>`;
         }
-        
-        html += `<div class="${threadClass}" data-thread="${thread.id}">
-            ${opHtml}
-            <div id="repliesContainer-${thread.id}">${repliesHtml}</div>
-            ${moreLink}
-            ${replyButtonHtml}
-        </div>`;
-    }
-    container.innerHTML = html;
-    attachThreadEvents();
+        container.innerHTML = html;
+        attachThreadEvents();
+    }, 10);
 }
 
 async function renderThreadView(threadId) {
     currentThreadId = threadId;
-    let threads = await getThreadsForBoard(currentBoard);
-    let opPost = threads.find(t => t.id === threadId);
-    if (!opPost) {
-        renderBoardView();
-        return;
-    }
-    let allReplies = await getRepliesForThread(threadId);
-    let container = document.getElementById('threadsContainer');
-    const isLocked = opPost.locked;
-    let opHtml = renderPost(opPost, true, false, threadId, isLocked);
-    let repliesHtml = '';
-    for (let r of allReplies) {
-        if (!r.isOp) repliesHtml += renderPost(r, false, true, threadId, isLocked);
-    }
-    let backBtn = `<div style="margin-bottom: 16px;"><button id="backToBoardBtn">← Back to /${currentBoard}/</button></div>`;
+    document.getElementById('threadsContainer').innerHTML = '<div class="loading-spinner">Loading thread...</div>';
     
-    let replyFormHtml = '';
-    if (!isLocked) {
-        replyFormHtml = `<div style="margin-top: 20px; text-align: center;">
-            <button id="showReplyModalBtn" data-thread="${threadId}">💬 Post reply</button>
-        </div>`;
-    } else {
-        replyFormHtml = `<div style="margin-top: 20px; text-align: center; color: #6f8f6f;">⛔ This thread is locked</div>`;
-    }
-    
-    container.innerHTML = backBtn + `<div class="thread" data-thread="${threadId}">${opHtml}<div id="repliesContainer">${repliesHtml}</div>${replyFormHtml}</div>`;
-    
-    document.getElementById('backToBoardBtn').onclick = () => { currentThreadId = null; renderBoardView(); };
-    document.getElementById('showReplyModalBtn')?.addEventListener('click', () => {
-        showReplyModal(threadId);
-    });
-    attachQuoteLinks();
-    attachOpControls();
+    setTimeout(async () => {
+        let threads = await getThreadsForBoard(currentBoard);
+        let opPost = threads.find(t => t.id === threadId);
+        if (!opPost) {
+            renderBoardView();
+            return;
+        }
+        let allReplies = await getRepliesForThread(threadId);
+        let container = document.getElementById('threadsContainer');
+        const isLocked = opPost.locked;
+        let opHtml = renderPost(opPost, true, false, threadId, isLocked);
+        let repliesHtml = '';
+        for (let r of allReplies) {
+            if (!r.isOp) repliesHtml += renderPost(r, false, true, threadId, isLocked);
+        }
+        let backBtn = `<div style="margin-bottom: 16px;"><button id="backToBoardBtn">← Back to /${currentBoard}/</button></div>`;
+        
+        let replyFormHtml = '';
+        if (!isLocked) {
+            replyFormHtml = `<div style="margin-top: 20px; text-align: center;">
+                <button id="showReplyModalBtn" data-thread="${threadId}">💬 Post reply</button>
+            </div>`;
+        } else {
+            replyFormHtml = `<div style="margin-top: 20px; text-align: center; color: #6f8f6f;">⛔ This thread is locked</div>`;
+        }
+        
+        container.innerHTML = backBtn + `<div class="thread" data-thread="${threadId}">${opHtml}<div id="repliesContainer">${repliesHtml}</div>${replyFormHtml}</div>`;
+        
+        document.getElementById('backToBoardBtn').onclick = () => { currentThreadId = null; renderBoardView(); };
+        const replyBtn = document.getElementById('showReplyModalBtn');
+        if (replyBtn) {
+            replyBtn.onclick = () => showReplyModal(threadId);
+        }
+        attachQuoteLinks();
+        attachOpControls();
+    }, 10);
 }
 
 async function handleOpAction(action, threadId, postId = null) {
@@ -589,7 +550,6 @@ function attachOpControls() {
 }
 
 function attachThreadEvents() {
-
     document.querySelectorAll('[data-viewthread]').forEach(a => {
         a.onclick = async (e) => {
             e.preventDefault();
@@ -598,7 +558,6 @@ function attachThreadEvents() {
         };
     });
     
-
     document.querySelectorAll('.reply-link').forEach(el => {
         el.onclick = (e) => {
             e.preventDefault();
@@ -609,7 +568,6 @@ function attachThreadEvents() {
         };
     });
     
-
     document.querySelectorAll('.toggle-reply-btn').forEach(btn => {
         btn.onclick = (e) => {
             e.preventDefault();
@@ -657,7 +615,6 @@ function renderBoardNav() {
     });
 }
 
-
 function initModal() {
     const modal = document.getElementById('replyModal');
     const closeBtn = document.querySelector('.reply-modal-close');
@@ -691,9 +648,10 @@ document.getElementById('createThreadBtn').onclick = async () => {
     document.getElementById('postComment').value = '';
     document.getElementById('postSubject').value = '';
     document.getElementById('postImages').value = '';
+    document.getElementById('sageMode').checked = false;
+    document.getElementById('postName').value = '';
     
-    if (currentThreadId === null) await renderBoardView();
-    else await renderBoardView();
+    await renderBoardView();
 };
 
 loadLocal();
