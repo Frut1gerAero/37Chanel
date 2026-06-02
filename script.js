@@ -22,12 +22,11 @@ const boardNameMap = { b: 'Random', k: 'Weapons', pol: 'Politics', prog: 'Progra
 let supabaseClient = null;
 
 function initSupabase() {
-    if (typeof window.supabase !== 'undefined' && SUPABASE_URL) {
+    if (typeof window.supabase !== 'undefined') {
         try {
             supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
             return true;
         } catch (e) {
-            console.warn('Supabase init failed:', e);
             return false;
         }
     }
@@ -36,30 +35,76 @@ function initSupabase() {
 
 const isSupabaseActive = initSupabase();
 
+function replaceFileExtension(fileName, extension) {
+    const baseName = fileName.replace(/\.[^/.]+$/, '') || 'image';
+    return `${baseName}.${extension}`;
+}
+
+function blobToImage(blob) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        const objectUrl = URL.createObjectURL(blob);
+        img.onload = () => {
+            URL.revokeObjectURL(objectUrl);
+            resolve(img);
+        };
+        img.onerror = () => {
+            URL.revokeObjectURL(objectUrl);
+            reject(new Error('Failed to load image'));
+        };
+        img.src = objectUrl;
+    });
+}
+
+async function convertImageToWebp(file) {
+    if (!file || !file.type.startsWith('image/')) return file;
+
+    if (file.type === 'image/webp') {
+        return new File([file], replaceFileExtension(file.name, 'webp'), { type: 'image/webp' });
+    }
+
+    const image = await blobToImage(file);
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth || image.width;
+    canvas.height = image.naturalHeight || image.height;
+
+    const context = canvas.getContext('2d');
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    const webpBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.88));
+    if (!webpBlob) throw new Error('Failed to convert image to webp');
+
+    return new File([webpBlob], replaceFileExtension(file.name, 'webp'), {
+        type: 'image/webp',
+        lastModified: Date.now()
+    });
+}
+
 async function uploadImage(file, postId, index) {
     if (!isSupabaseActive || !supabaseClient) return null;
     
-    const fileExt = file.name.split('.').pop();
+    const fileExt = 'webp';
     const fileName = `${postId}_${index}_${Date.now()}.${fileExt}`;
     const filePath = `images/${fileName}`;
     
     try {
-        const { data, error } = await supabaseClient.storage
+        const webpFile = await convertImageToWebp(file);
+        const { error } = await supabaseClient.storage
             .from('images')
-            .upload(filePath, file, {
+            .upload(filePath, webpFile, {
                 cacheControl: '3600',
+                contentType: 'image/webp',
                 upsert: false
             });
         
-        if (error) throw error;
+        if (error) return null;
         
-        const { data: publicUrl } = supabaseClient.storage
+        const { data: publicUrlData } = supabaseClient.storage
             .from('images')
             .getPublicUrl(filePath);
         
-        return publicUrl.publicUrl;
+        return publicUrlData.publicUrl;
     } catch (e) {
-        console.warn('Image upload failed:', e);
         return null;
     }
 }
@@ -203,18 +248,18 @@ async function createPost(board, threadId, subject, comment, nameRaw, imageFiles
     if (isSupabaseActive && supabaseClient) {
         try {
             const { error } = await supabaseClient.from('posts').insert([post]);
-            if (error) throw error;
-            saveToLocal();
-            return post;
+            if (error) {
+                saveToLocal();
+            } else {
+                saveToLocal();
+            }
         } catch (e) {
-            console.warn('Supabase insert failed, using local:', e);
             saveToLocal();
-            return post;
         }
     } else {
         saveToLocal();
-        return post;
     }
+    return post;
 }
 
 async function deletePost(postId, threadId) {
@@ -280,7 +325,7 @@ async function loadFromSupabase() {
             .select('*')
             .order('timestamp', { ascending: false });
         
-        if (error) throw error;
+        if (error) return false;
         
         if (posts && posts.length) {
             for (const post of posts) {
@@ -309,7 +354,7 @@ async function loadFromSupabase() {
             return true;
         }
     } catch (e) {
-        console.warn('Failed to load from Supabase:', e);
+        return false;
     }
     return false;
 }
@@ -396,7 +441,7 @@ function renderPost(post, isOp, showReplyLink = true, threadRootId = null, isThr
     let imagesHtml = '';
     if (post.images && post.images.length) {
         imagesHtml = `<div class="attachments">${post.images.map(img => 
-            `<img src="${img}" class="thumb-img" data-fullimg="${img}" onclick="window.showFullImage(this)" loading="lazy">`
+            `<img src="${img}" class="thumb-img" data-fullimg="${img}" onclick="window.showFullImage(this)" loading="lazy" onerror="this.style.display='none'">`
         ).join('')}</div>`;
     }
     
@@ -505,7 +550,7 @@ async function renderBoardView() {
         let threads = await getThreadsForBoard(currentBoard);
         let container = document.getElementById('threadsContainer');
         if (!threads || !threads.length) {
-            container.innerHTML = `<div style="padding: 32px; text-align:center; border:1px solid #2a4a3a;">✨ No threads yet. Create the first one.</div>`;
+            container.innerHTML = `<div style="padding: 32px; text-align:center; border:1px solid #2a4a3a;">Тредов пока нет, иногда сервера чистятся</div>`;
             return;
         }
         let html = '';
