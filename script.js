@@ -1,5 +1,7 @@
-const SUPABASE_URL = '';
-const SUPABASE_ANON_KEY = '';
+const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const HCAPTCHA_SITEKEY = 'YOUR_HCAPTCHA_SITEKEY';
+const HCAPTCHA_SECRET = 'YOUR_HCAPTCHA_SECRET';
 
 let currentBoard = 'b';
 let currentThreadId = null;
@@ -21,8 +23,12 @@ const boardNameMap = { b: 'Random', k: 'Weapons', pol: 'Politics', prog: 'Progra
 
 let supabaseClient = null;
 
+function isCaptchaEnabled() {
+    return HCAPTCHA_SITEKEY !== 'YOUR_HCAPTCHA_SITEKEY' && HCAPTCHA_SECRET !== 'YOUR_HCAPTCHA_SECRET';
+}
+
 function initSupabase() {
-    if (typeof window.supabase !== 'undefined') {
+    if (typeof window.supabase !== 'undefined' && SUPABASE_URL !== 'YOUR_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY') {
         try {
             supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
             return true;
@@ -34,6 +40,132 @@ function initSupabase() {
 }
 
 const isSupabaseActive = initSupabase();
+
+async function verifyHCaptcha(token) {
+    if (!isCaptchaEnabled()) return true;
+    if (!token) return false;
+    
+    try {
+        const formData = new URLSearchParams();
+        formData.append('secret', HCAPTCHA_SECRET);
+        formData.append('response', token);
+        formData.append('sitekey', HCAPTCHA_SITEKEY);
+        
+        const response = await fetch('https://api.hcaptcha.com/siteverify', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: formData.toString()
+        });
+        
+        const data = await response.json();
+        return data.success === true;
+    } catch (error) {
+        return false;
+    }
+}
+
+async function getHCaptchaResponse(scope) {
+    if (!isCaptchaEnabled()) return 'disabled';
+    
+    return new Promise((resolve) => {
+        const captchaElement = scope === 'post' ? 
+            document.querySelector('#postFormArea .h-captcha') : 
+            document.querySelector('#replyModal .h-captcha');
+        
+        if (!captchaElement || !window.hcaptcha) {
+            resolve(null);
+            return;
+        }
+        
+        const widgetId = captchaElement.getAttribute('data-hcaptcha-widget-id');
+        if (!widgetId) {
+            resolve(null);
+            return;
+        }
+        
+        const response = window.hcaptcha.getResponse(widgetId);
+        resolve(response);
+    });
+}
+
+function resetHCaptcha(scope) {
+    if (!isCaptchaEnabled()) return;
+    
+    const captchaElement = scope === 'post' ? 
+        document.querySelector('#postFormArea .h-captcha') : 
+        document.querySelector('#replyModal .h-captcha');
+    if (captchaElement && window.hcaptcha && window.hcaptcha.reset) {
+        window.hcaptcha.reset(captchaElement);
+    }
+}
+
+async function validateCaptcha(scope) {
+    const trap = document.getElementById(`${scope}Website`);
+    if (trap && trap.value.trim()) return false;
+    
+    if (!isCaptchaEnabled()) return true;
+    
+    const token = await getHCaptchaResponse(scope);
+    
+    if (!token || token.length === 0) {
+        alert('Please complete the hCaptcha verification');
+        return false;
+    }
+    
+    const isValid = await verifyHCaptcha(token);
+    
+    if (!isValid) {
+        alert('hCaptcha verification failed. Please try again.');
+        resetHCaptcha(scope);
+        return false;
+    }
+    
+    return true;
+}
+
+function genId() { return Date.now() + '-' + Math.random().toString(36).substring(2, 8); }
+
+async function tripcodeEncode(name) {
+    if (!name || !name.includes('#')) return name || 'Anonymous';
+    const parts = name.split('#');
+    const key = parts.pop();
+    const encoder = new TextEncoder();
+    const data = encoder.encode(key);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const trip = hashArray.slice(0, 6).map(b => b.toString(16).padStart(2, '0')).join('');
+    const displayName = parts.join('#') || 'Anonymous';
+    return `${displayName} !${trip}`;
+}
+
+function generateOpToken(threadId) {
+    const salt = localStorage.getItem('op_salt') || (() => {
+        const s = Math.random().toString(36).substring(2, 15);
+        localStorage.setItem('op_salt', s);
+        return s;
+    })();
+    const raw = threadId + salt + Date.now();
+    let hash = 0;
+    for (let i = 0; i < raw.length; i++) {
+        hash = ((hash << 5) - hash) + raw.charCodeAt(i);
+        hash |= 0;
+    }
+    return 'op_' + Math.abs(hash).toString(36);
+}
+
+function isUserOp(threadId) {
+    return activeOpThreads.has(threadId);
+}
+
+function registerOpToken(threadId) {
+    const token = generateOpToken(threadId);
+    opTokens[threadId] = token;
+    activeOpThreads.add(threadId);
+    saveOpTokens();
+    return token;
+}
 
 function replaceFileExtension(fileName, extension) {
     const baseName = fileName.replace(/\.[^/.]+$/, '') || 'image';
@@ -143,48 +275,6 @@ function saveLocal() {
 
 function saveOpTokens() {
     localStorage.setItem(OP_TOKENS_KEY, JSON.stringify(opTokens));
-}
-
-function genId() { return Date.now() + '-' + Math.random().toString(36).substring(2, 8); }
-
-async function tripcodeEncode(name) {
-    if (!name || !name.includes('#')) return name || 'Anonymous';
-    const parts = name.split('#');
-    const key = parts.pop();
-    const encoder = new TextEncoder();
-    const data = encoder.encode(key);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const trip = hashArray.slice(0, 6).map(b => b.toString(16).padStart(2, '0')).join('');
-    const displayName = parts.join('#') || 'Anonymous';
-    return `${displayName} !${trip}`;
-}
-
-function generateOpToken(threadId) {
-    const salt = localStorage.getItem('op_salt') || (() => {
-        const s = Math.random().toString(36).substring(2, 15);
-        localStorage.setItem('op_salt', s);
-        return s;
-    })();
-    const raw = threadId + salt + Date.now();
-    let hash = 0;
-    for (let i = 0; i < raw.length; i++) {
-        hash = ((hash << 5) - hash) + raw.charCodeAt(i);
-        hash |= 0;
-    }
-    return 'op_' + Math.abs(hash).toString(36);
-}
-
-function isUserOp(threadId) {
-    return activeOpThreads.has(threadId);
-}
-
-function registerOpToken(threadId) {
-    const token = generateOpToken(threadId);
-    opTokens[threadId] = token;
-    activeOpThreads.add(threadId);
-    saveOpTokens();
-    return token;
 }
 
 async function createPost(board, threadId, subject, comment, nameRaw, imageFiles, sage, isOp) {
@@ -496,6 +586,7 @@ function showReplyModal(threadId, postId = null, postNum = null) {
     document.getElementById('replyComment').value = '';
     document.getElementById('replyImages').value = '';
     document.getElementById('replySage').checked = false;
+    document.getElementById('replyWebsite').value = '';
     
     if (postId && postNum) {
         document.getElementById('replyComment').value = `>>${postNum}\n`;
@@ -511,6 +602,8 @@ function hideReplyModal() {
 
 async function submitReplyFromModal() {
     if (!currentReplyTarget) return;
+    
+    if (!await validateCaptcha('reply')) return;
     
     const name = document.getElementById('replyName').value;
     let comment = document.getElementById('replyComment').value;
@@ -532,6 +625,8 @@ async function submitReplyFromModal() {
     
     await createPost(currentBoard, threadId, '', comment, name, images, sage, false);
     
+    resetHCaptcha('reply');
+    
     hideReplyModal();
     
     if (currentThreadId === threadId) {
@@ -550,7 +645,7 @@ async function renderBoardView() {
         let threads = await getThreadsForBoard(currentBoard);
         let container = document.getElementById('threadsContainer');
         if (!threads || !threads.length) {
-            container.innerHTML = `<div style="padding: 32px; text-align:center; border:1px solid #2a4a3a;">Тредов пока нет, иногда сервера чистятся</div>`;
+            container.innerHTML = `<div style="padding: 32px; text-align:center; border:1px solid #2a4a3a;">No threads yet</div>`;
             return;
         }
         let html = '';
@@ -749,7 +844,25 @@ function initModal() {
     };
 }
 
+function updateHCaptchaSitekeys() {
+    if (isCaptchaEnabled()) {
+        const captchaElements = document.querySelectorAll('.h-captcha');
+        captchaElements.forEach(el => {
+            el.setAttribute('data-sitekey', HCAPTCHA_SITEKEY);
+        });
+        if (window.hcaptcha && window.hcaptcha.render) {
+            captchaElements.forEach(el => {
+                if (!el.hasAttribute('data-hcaptcha-widget-id')) {
+                    window.hcaptcha.render(el);
+                }
+            });
+        }
+    }
+}
+
 document.getElementById('createThreadBtn').onclick = async () => {
+    if (!await validateCaptcha('post')) return;
+    
     let name = document.getElementById('postName').value;
     let subject = document.getElementById('postSubject').value;
     let comment = document.getElementById('postComment').value;
@@ -769,6 +882,9 @@ document.getElementById('createThreadBtn').onclick = async () => {
     document.getElementById('postImages').value = '';
     document.getElementById('sageMode').checked = false;
     document.getElementById('postName').value = '';
+    document.getElementById('postWebsite').value = '';
+    
+    resetHCaptcha('post');
     
     await renderBoardView();
 };
@@ -776,6 +892,7 @@ document.getElementById('createThreadBtn').onclick = async () => {
 loadLocal();
 renderBoardNav();
 initModal();
+updateHCaptchaSitekeys();
 
 (async () => {
     await loadFromSupabase();
